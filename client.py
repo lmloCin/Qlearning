@@ -9,23 +9,24 @@ ACTIONS = ["left", "right", "jump"]
 NUM_ACTIONS = len(ACTIONS)
 
 # Parâmetros do Q-Learning
-ALPHA = 0.5  # Taxa de aprendizado
-GAMMA = 0.7  # Fator de desconto
-EPSILON = 0.2  # Probabilidade de exploração
-EPISODES = 300  # Número de episódios de treinamento
+ALPHA = 0.3       # Taxa de aprendizado
+GAMMA = 0.7       # Valorização de recompensas futuras
+EPSILON = 0.5     # Exploração 
+EPSILON_MIN = 0.01 # Mínimo de exploração
+EPISODES = 200    # episódios para aprendizado completo
+
 
 class QLearningAgent:
     def __init__(self):
-        # Inicializa a Q-table: 96 estados (24 plataformas × 4 direções) × 3 ações
-        self.q_table = np.zeros((NUM_PLATAFORMAS * NUM_DIRECOES, NUM_ACTIONS))
+        self.q_table = np.loadtxt("qtable.txt")
         
     def state_to_index(self, state_bin):
         """
         Converte o estado binário recebido do jogo em um índice para a Q-table
         Formato do estado: 7 bits (5 para plataforma + 2 para direção)
         """
-        platform = int(state_bin[:5], 2)  # Primeiros 5 bits representam a plataforma (0-23)
-        direction = int(state_bin[5:], 2)  # Últimos 2 bits representam a direção (0-3)
+        platform = int(state_bin[2:7], 2)  # Primeiros 5 bits representam a plataforma (0-23)
+        direction = int(state_bin[7:], 2)  # Últimos 2 bits representam a direção (0-3)
         return platform * NUM_DIRECOES + direction
     
     def choose_action(self, state_index, epsilon):
@@ -69,40 +70,23 @@ def train_agent():
         # Obtém o estado inicial
         state_bin, reward = get_state_reward(socket, "jump")  # Ação dummy para iniciar
         state_index = agent.state_to_index(state_bin)
-        last_reward = 0
         done = False
         total_reward = 0
-        last_actions =["jump", "jump", "jump"]
+
+        current_epsilon = max(EPSILON_MIN, EPSILON - ((episode//100)*0.1))
+
         while not done:
             # Escolhe uma ação
-            action_idx = agent.choose_action(state_index, EPSILON)
+            action_idx = agent.choose_action(state_index, current_epsilon)
             action = ACTIONS[action_idx]
-            last_actions.pop(0)
-            last_actions.append(action)
-            if all(a in ["left", "right"] for a in last_actions):
-                action = "jump"
+
             # Executa a ação e obtém novo estado e recompensa
             new_state_bin, reward = get_state_reward(socket, action)
-            new_state_index = agent.state_to_index(new_state_bin)
-
-            if  (last_actions[2] == "right" and last_actions[1] == "left") or (last_actions[1] == "right" and last_actions[2] == "left") :
-                if last_actions[0]== "right" or "left":
-                    reward *= 3
-                else:
-                    reward *= 2
-            elif last_reward >= reward :
-                reward *= 3
-            else:
-                reward = -1
+            new_state_index = agent.state_to_index(new_state_bin)  
                 
-            if reward == -300:
-                last_reward = 0 
+            if reward == -100:
                 done = True
-            if reward >=0: # Verifica se chegou ao objetivo (bloco preto)
-                total_reward = 100000
-                reward = 100000
-                done = True
-            last_reward = reward
+          
             total_reward += reward
             # Atualiza a Q-table
             agent.update_q_table(state_index, action_idx, reward, new_state_index)
@@ -112,12 +96,11 @@ def train_agent():
 
 
 
-            
-        print(f"Episódio: {episode + 1}, Recompensa Total: {total_reward}")
+        agent.save_q_table("qtable.txt")    
+        print(f"Episódio: {episode + 1}, Recompensa Total: {total_reward}, Current Epsilon: {current_epsilon}")
     
-    # Salva a Q-table após o treinamento
-    agent.save_q_table("qtable.txt")
-    print("Treinamento concluído e Q-table salva.")
+
+    print("Treinamento concluído")
     
     return agent
 
@@ -141,17 +124,17 @@ def run_trained_agent(q_table_file, agent):
         
         new_state_bin, reward = get_state_reward(socket, action)
         state_index = agent.state_to_index(new_state_bin)
-        if reward == -100 or contador == 1:
-            contador -= 1
-            done = True
         
-        # Verifica condição de término
+        if reward == -100 or contador == 1:
+            done = True
+        contador -= 1
+
 
 if __name__ == "__main__":
     # Treina o agente
-    #agent = train_agent()
+    agent = train_agent()
     
-    # Opcional: Executa o agente treinado
+    # Executa o agente treinado
     
     agente_run = QLearningAgent()
     run_trained_agent("qtable.txt", agente_run)
