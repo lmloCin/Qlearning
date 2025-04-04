@@ -13,7 +13,7 @@ ALPHA = 0.3       # Taxa de aprendizado
 GAMMA = 0.7       # Valorização de recompensas futuras
 EPSILON = 0.5     # Exploração 
 EPSILON_MIN = 0.01 # Mínimo de exploração
-EPISODES = 200    # episódios para aprendizado completo
+EPISODES = 500    # episódios para aprendizado completo
 
 
 class QLearningAgent:
@@ -73,8 +73,8 @@ def train_agent():
         done = False
         total_reward = 0
 
-        current_epsilon = max(EPSILON_MIN, EPSILON - ((episode//100)*0.1))
-
+        #current_epsilon = max(EPSILON_MIN, EPSILON - ((episode//100)*0.1))
+        current_epsilon = max(EPSILON_MIN, EPSILON - ((episode//100)*0.01))
         while not done:
             # Escolhe uma ação
             action_idx = agent.choose_action(state_index, current_epsilon)
@@ -116,23 +116,50 @@ def run_trained_agent(q_table_file, agent):
     
     done = False
     contador = 20
+    lost = 0
+    # criando esse registro de ações passadas, para garantir que se acontcer travamentos, o among se jogue e perca a rodada
+    last_actions = ["jump", "jump", "jump", "jump", "jump" ]
     while not done:
         # Sempre escolhe a melhor ação (epsilon = 0)
         action_idx = np.argmax(q_table[state_index])
         action = ACTIONS[action_idx]
-
+        last_actions.pop(0)
+        last_actions.append(action)
         
         new_state_bin, reward = get_state_reward(socket, action)
         state_index = agent.state_to_index(new_state_bin)
-        
-        if reward == -100 or contador == 1:
+        l_r_counter = 0
+        for i in last_actions:
+            if i == 'left' or i == 'right':
+                l_r_counter += 1
+
+        if reward == -100:
+            print(f'rodada atual: {21-contador}')
+            contador -= 1
+            lost += 1
+            last_actions = ["jump", "jump", "jump", "jump", "jump" ]
+        elif l_r_counter == 5:
+            print(f'rodada atual: {21-contador}')
+            # Pular até se matar
+            while reward != -100:
+                new_state_bin, reward = get_state_reward(socket, 'jump')
+            contador -= 1
+            lost += 1
+            last_actions = ["jump", "jump", "jump", "jump", "jump" ]
+        else:
+            if reward > 0:
+                print(f'rodada atual: {21-contador}')
+                contador -= 1
+                last_actions = ["jump", "jump", "jump", "jump", "jump" ]
+        if contador <= 1:
             done = True
-        contador -= 1
+
+    print(f'taxa de acerto em 20 tentativas: {(20 - lost)/ 20}%')
 
 
 if __name__ == "__main__":
     # Treina o agente
-    agent = train_agent()
+    #agent = train_agent()
     
     # Executa o agente treinado
     
